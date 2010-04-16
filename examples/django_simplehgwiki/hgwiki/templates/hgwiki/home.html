@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+
+{% block title %}Wiki{% endblock %}
+
+{% block menu_top %}{{ block.super }}
+<div class="menu-top-submenu">
+    <ul class="menu-top-left">
+        <li><a href="{% url hgwiki_home %}">Wiki home</a></li>
+        <li><a href="{% url hgwiki_wiki_list %}">Wiki list</a></li>
+    </ul>
+</div>
+{% endblock %}
+
+{% block col_left_title %}Left column title{% endblock %}
+{% block col_left_content %}
+    <ul class="nav-vertical">
+        <li><a href="{% url hgwiki_home %}">Home</a></li>
+    </ul>
+{% endblock %}
+
+{% block col_main_title %}Mercurial wiki{% endblock %}
+{% block col_main_content %}
+<h1>HGWiki</h1>
+
+
+{% endblock %}
+
