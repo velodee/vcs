@@ -19,6 +19,7 @@ from vcs.exceptions import RepositoryError, ChangesetError
 from vcs.nodes import FileNode, DirNode, NodeKind, RootNode, RemovedFileNode
 from vcs.utils.paths import abspath, get_dirs_for_path
 from vcs.utils.lazy import LazyProperty
+from vcs.utils.ordered_dict import OrderedDict
 
 from mercurial import ui
 from mercurial.context import short
@@ -46,7 +47,6 @@ class MercurialRepository(BaseRepository):
         self.baseui = baseui or ui.ui()
         # We've set path and ui, now we can set repo itself
         self._set_repo(create)
-        
         self.revisions = list(self.repo)
         self.changesets = {}
 
@@ -58,15 +58,21 @@ class MercurialRepository(BaseRepository):
     def branches(self):
         if not self.revisions:
             return {}
-        return dict((name, short(head))
-            for name, head in self.repo.branchtags().items())
+        sortkey = lambda ctx: ctx[1]._ctx.rev()
+        s_branches = sorted([(name, self.get_changeset(short(head))) for 
+            name, head in self.repo.branchtags().items()], key=sortkey,
+            reverse=True)
+        return OrderedDict((name, cs.raw_id) for name, cs in s_branches)
 
     @LazyProperty
     def tags(self):
         if not self.revisions:
             return {}
-        return dict((name, short(head))
-            for name, head in self.repo.tags().items())
+
+        sortkey = lambda ctx: ctx[1]._ctx.rev()
+        s_tags = sorted([(name, self.get_changeset(short(head))) for 
+            name, head in self.repo.tags().items()], key=sortkey, reverse=True)
+        return OrderedDict((name, cs.raw_id) for name, cs in s_tags)
 
     def _set_repo(self, create):
         """
@@ -85,7 +91,7 @@ class MercurialRepository(BaseRepository):
                 msg = "Not valid repository at %s. Original error was %s"\
                     % (self.path, err)
             raise RepositoryError(msg)
-    
+
     @LazyProperty
     def description(self):
         undefined_description = 'unknown'
@@ -162,7 +168,9 @@ class MercurialRepository(BaseRepository):
         """
         Return last n number of ``MercurialChangeset`` specified by limit
         attribute if None is given whole list of revisions is returned
+
         @param limit: int limit or None
+        @param offset: int offset
         """
         count = self.count()
         offset = offset or 0
@@ -234,7 +242,7 @@ class MercurialChangeset(BaseChangeset):
         """
         Returns list of parents changesets.
         """
-        return [self.repository.get_changeset(parent.rev()) 
+        return [self.repository.get_changeset(parent.rev())
                 for parent in self._ctx.parents() if parent.rev() >= 0]
 
     def _fix_path(self, path):

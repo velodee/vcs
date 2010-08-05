@@ -71,6 +71,11 @@ class DiffProcessor(object):
             self.differ = self._highlight_line_udiff
 
     def escaper(self, string):
+        try:
+            string = unicode(string)
+        except UnicodeDecodeError:
+            #incase we have a decode error just represent as byte string
+            string = unicode(str(string).encode('string_escape'))
         return string.replace('<', '&lt;').replace('>', '&gt;')
 
     def copy_iterator(self):
@@ -302,10 +307,12 @@ class DiffProcessor(object):
                 return label
 
         diff_lines = self.prepare()
+        _html_empty = True
         _html = '''<table class="%(table_class)s">\n''' \
                                             % {'table_class':table_class}
         for diff in diff_lines:
             for line in diff['chunks']:
+                _html_empty = False
                 for change in line:
                     _html += '''<tr class="%(line_class)s %(action)s">\n''' \
                         % {'line_class':line_class, 'action':change['action']}
@@ -360,6 +367,7 @@ class DiffProcessor(object):
                     _html += '''\t</td>'''
                     _html += '''\n</tr>\n'''
         _html += '''</table>'''
+        if _html_empty:return None
         return _html
 
 
