@@ -125,3 +125,6 @@ class NodeContentTest(unittest2.TestCase):
         filenode = FileNode('calendar.png', content=data)
         self.assertTrue(filenode.is_binary)
 
+
+if __name__ == '__main__':
+    unittest2.main()

@@ -15,9 +15,10 @@ from subprocess import Popen, PIPE
 
 from itertools import chain
 
-from vcs.backends.base import BaseRepository
 from vcs.backends.base import BaseChangeset
 from vcs.backends.base import BaseInMemoryChangeset
+from vcs.backends.base import BaseRepository
+from vcs.backends.base import BaseWorkdir
 from vcs.exceptions import RepositoryError
 from vcs.exceptions import EmptyRepositoryError
 from vcs.exceptions import ChangesetError
@@ -50,6 +51,10 @@ class GitRepository(BaseRepository):
         self.changesets = {}
 
     @LazyProperty
+    def workdir(self):
+        return GitWorkdir(self)
+
+    @LazyProperty
     def revisions(self):
         """
         Returns list of revisions' ids, in ascending order.  Being lazy
@@ -69,8 +74,8 @@ class GitRepository(BaseRepository):
 
         :param cmd: git command to be executed
         """
-        #cmd = '(cd %s && git %s)' % (self.path, cmd)
-        cmd = 'git %s' % cmd
+        git_exec = 'git'
+        cmd = '%s %s' % (git_exec, cmd)
         try:
             p = Popen(cmd, shell=True, stdout=PIPE, stderr=PIPE, cwd=self.path)
         except OSError, err:
@@ -598,4 +603,40 @@ class GitInMemoryChangeset(BaseInMemoryChangeset):
         tip = self.repository.get_changeset()
         self.reset()
         return tip
+
+
+class GitWorkdir(BaseWorkdir):
+
+    def get_untracked(self):
+        return self.get_status()['untracked']
+
+    def get_status(self):
+        cmd = 'status --porcelain'
+        so, se = self.repository.run_git_command(cmd)
+        added, changed, removed, untracked = [], [], [], []
+        for line in so.splitlines():
+            state, path = re.split(r'\s+', line, 1)
+            if 'A' == state:
+                added.append(FileNode(path))
+            if 'D' == state:
+                removed.append(RemovedFileNode(path))
+            if 'M' in state:
+                changed.append(FileNode(path))
+            if '?' in state:
+                if path.endswith('/'):
+                    internaltop = os.path.join(self.repository.path, path)
+                    for top, dirs, files in os.walk(internaltop):
+                        for f in files:
+                            _node_path = os.path.join(top, f)
+                            node_path = _node_path[len(self.repository.path):]\
+                                .strip('\\/')
+                            untracked.append(FileNode(node_path))
+                else:
+                    untracked.append(FileNode(path))
+        return {
+            'added': added,
+            'changed': changed,
+            'removed': removed,
+            'untracked': untracked,
+        }
 
