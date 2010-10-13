@@ -85,12 +85,16 @@ class Node(object):
         """
         Comparator using name of the node, needed for quick list sorting.
         """
+        if not isinstance(other, Node):
+            raise TypeError("can only compare o a node")
         kind_cmp = cmp(self.kind, other.kind)
         if kind_cmp:
             return kind_cmp
         return cmp(self.name, other.name)
 
     def __eq__(self, other):
+        if not isinstance(other, Node):
+            return False
         for attr in self.__dict__:
             if self.__dict__[attr] != other.__dict__[attr]:
                 return False

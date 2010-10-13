@@ -33,6 +33,9 @@ class InMemoryChangesetTestMixin(object):
         return vcs.get_backend(self.backend_alias)
 
     def setUp(self):
+        """
+        Ensure that each test is run with new, clean repository.
+        """
         Backend = self.get_backend()
         self.repo_path = get_new_dir(str(time.time()))
         self.repo = Backend(self.repo_path, create=True)

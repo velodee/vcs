@@ -405,6 +405,32 @@ class BaseWorkdir(object):
     def __init__(self, repository):
         self.repository = repository
 
+    def add(self, *filenodes):
+        """
+        Marks entries at given nodes as *added*.
+
+        :raises ``NodeAlreadyExistsError``: if node with same path exists at
+          latest changeset
+        :raises ``NodeAlreadyAddedError``: if node with same path is already
+          marked as *added* in this workdir
+        """
+        raise NotImplementedError
+
+    def remove(self, *filenodes):
+        """
+        Marks entries at given nodes as *removed* in next commit at this
+        workdir.
+
+        :raises ``EmptyRepositoryError``: if there are no changesets yet
+        :raises ``NodeDoesNotExistError``: if node does not exist in latest
+          changeset
+        :raises ``NodeAlreadyRemovedError``: if node has been already marked to
+          be *removed*
+        :raises ``NodeAlreadyChangedError``: if node has been already marked to
+          be *changed*
+        """
+        raise NotImplementedError
+
     def get_added(self):
         """
         Returns list of ``FileNode`` objects marked as *new* in working
