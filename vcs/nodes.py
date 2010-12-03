@@ -26,13 +26,53 @@ class NodeState:
     NOT_CHANGED = u'not changed'
     REMOVED = u'removed'
 
+class NodeGeneratorBase(object):
+    """
+    Base class for removed added and changed filenodes, it's a lazy generator
+    class that will create filenodes only on iteration or call
+    
+    The len method doesn't need to create filenodes at all 
+    """
+
+    def __init__(self, current_paths, cs):
+        self.cs = cs
+        self.current_paths = current_paths
+
+    def __call__(self):
+        return [n for n in self]
+
+    def __len__(self):
+        return len(self.current_paths)
+
+    def __iter__(self):
+        for p in self.current_paths:
+            yield self.cs.get_node(p)
+
+class AddedFileNodesGenerator(NodeGeneratorBase):
+    """
+    Class holding Added files for current changeset
+    """
+    pass
+class ChangedFileNodesGenerator(NodeGeneratorBase):
+    """
+    Class holding Changed files for current changeset
+    """
+    pass
+class RemovedFileNodesGenerator(NodeGeneratorBase):
+    """
+    Class holding removed files for current changeset
+    """
+    def __iter__(self):
+        for p in self.current_paths:
+            yield RemovedFileNode(path=p)
+
 class Node(object):
     """
     Simplest class representing file or directory on repository.  SCM backends
     should use ``FileNode`` and ``DirNode`` subclasses rather than ``Node``
     directly.
 
-    Node's ``path`` cannot start with slash as we oparete on *relative* paths
+    Node's ``path`` cannot start with slash as we operate on *relative* paths
     only. Moreover, every single node is identified by the ``path`` attribute,
     so it cannot end with slash, too. Otherwise, path could lead to mistakes.
     """
@@ -188,7 +228,8 @@ class FileNode(Node):
             content = self.changeset.get_file_content(self.path)
         else:
             content = self._content
-
+        if bool(content and '\0' in content):
+            return content
         return safe_unicode(content)
 
     @LazyProperty
@@ -222,7 +263,9 @@ class FileNode(Node):
         """
         if hasattr(self, '_mimetype'):
             return self._mimetype
+
         mtype = mimetypes.guess_type(self.name)[0]
+
         if mtype is None:
             if self.is_binary:
                 mtype = 'application/octet-stream'
