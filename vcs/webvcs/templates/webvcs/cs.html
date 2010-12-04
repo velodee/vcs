@@ -1,0 +1,24 @@
+<html>
+    <body>
+        <h1>{{ repo }}</h1>
+
+        <h2>Changeset {{ changeset }}</h2>
+
+        {% for top, dirs, files in changeset.walk %}
+        <h3>{{ top.path }}</h3>
+        <ul>
+            {% for dir in dirs %}
+            <li>{{ dir }}</li>
+            {% endfor %}
+        </ul>
+        <ul>
+            {% for file in files %}
+            <li>{{ file }}</li>
+            {% endfor %}
+        </ul>
+        {% endfor %}
+
+    </body>
+</html>
+
+

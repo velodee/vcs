@@ -1,0 +1,28 @@
+<html>
+    <body>
+        <h1>{{ repo }}</h1>
+
+        <h2>Changesets</h2>
+
+        <table>
+            <caption>Changesets</caption>
+            <thead>
+                <tr>
+                    <th>Id</th>
+                    <th>Author</th>
+                    <th>Date</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for changeset in repo %}
+                <tr>
+                    <td><a href="/{{ changeset.raw_id }}/">{{ changeset }}</a></td>
+                    <td>{{ changeset.author }}</td>
+                    <td>{{ changeset.date }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </body>
+</html>
+
