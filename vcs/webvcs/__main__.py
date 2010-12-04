@@ -3,10 +3,11 @@ import os
 import sys
 from django.core.management import execute_manager
 
-PROJECT_ROOT = '/Users/lukaszb/develop/workspace/projector'
-PROJECT_DIR = PROJECT_ROOT + '/example_project'
-sys.path.insert(0, PROJECT_ROOT)
-sys.path.insert(0, PROJECT_DIR)
+abspath = lambda *p: os.path.abspath(os.path.join(*p))
+
+PROJECT_ROOT = abspath(os.path.dirname(__file__), '..')
+sys.path.append(PROJECT_ROOT)
+
 os.environ['DJANGO_SETTINGS_MODULE'] = 'webvcs.settings'
 
 try:
