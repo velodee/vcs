@@ -1,28 +1,31 @@
-<html>
-    <body>
-        <h1>{{ repo }}</h1>
+{% extends "base.html" %}
+{% load i18n %}
 
-        <h2>Changesets</h2>
+{% block body %}
+        <h1>{{ repo.name }}</h1>
+
+        <h2>{% trans "Changesets" %}</h2>
 
         <table>
-            <caption>Changesets</caption>
+            <caption>{% trans "Changesets" %}</caption>
             <thead>
                 <tr>
-                    <th>Id</th>
-                    <th>Author</th>
-                    <th>Date</th>
+                    <th>ID</th>
+                    <th>{% trans "Browse content" %}</th>
+                    <th>{% trans "Author" %}</th>
+                    <th>{% trans "Date" %}</th>
                 </tr>
             </thead>
             <tbody>
-                {% for changeset in repo %}
+                {% for changeset in repo.get_changesets %}
                 <tr>
-                    <td><a href="/{{ changeset.raw_id }}/">{{ changeset }}</a></td>
+                    {#<td><a href="/{{ changeset.raw_id }}/">{{ changeset }}</a></td>#}
+                    <td><a href="{% url webvcs_changeset_detail changeset.id %}">{{ changeset }}</a></td>
+                    <td><a href="{% url webvcs_node_detail changeset.id '/' %}">{% trans "Content" %}</a></td>
                     <td>{{ changeset.author }}</td>
                     <td>{{ changeset.date }}</td>
                 </tr>
                 {% endfor %}
             </tbody>
         </table>
-    </body>
-</html>
-
+{% endblock %}

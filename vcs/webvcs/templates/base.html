@@ -1,0 +1,51 @@
+{% load i18n %}
+<html xmlns="http://www.w3.org/1999/xhtml" xml:lang="en-us" lang="en-us">
+<head>
+    <title>{% block title %}webvcs{% endblock %}</title>
+    {% block head %}
+    <meta http-equiv="content-type" content="text/html; charset=utf-8" />
+    <meta http-equiv="content-style-type" content="text/css" />
+    <meta http-equiv="content-script-type" content="text/javascript" />
+    <style type="text/css">
+        pre.code-block {
+            border: 2px solid black;
+            padding: 5px;
+            color: #fff;
+            background-color: #000;
+        }
+    </style>
+    {% endblock %}
+    {% block extrahead %}{% endblock %}
+</head>
+<html>
+    <body>
+        {% block body %}
+        {% block content %}
+        <h1>{{ repo }}</h1>
+
+        <h2>Changesets</h2>
+
+        <table>
+            <caption>Changesets</caption>
+            <thead>
+                <tr>
+                    <th>Id</th>
+                    <th>Author</th>
+                    <th>Date</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for changeset in repo.get_changesets %}
+                <tr>
+                    <td><a href="/{{ changeset.raw_id }}/">{{ changeset }}</a></td>
+                    <td>{{ changeset.author }}</td>
+                    <td>{{ changeset.date }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        {% endblock content %}
+        {% endblock body %}
+    </body>
+</html>
+
