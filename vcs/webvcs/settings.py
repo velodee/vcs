@@ -94,7 +94,5 @@ try:
 except ImportError:
     pass
 
-print PROJECT_ROOT
-
 CURDIR = os.getcwd()
-print "CURDIR: %s" % CURDIR
+

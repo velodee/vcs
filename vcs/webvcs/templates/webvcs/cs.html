@@ -1,24 +1,38 @@
+{% extends "base.html" %}
+{% load i18n %}
+
+{% block content %}
 <html>
     <body>
-        <h1>{{ repo }}</h1>
+        <h1>{{ repo.name }}</h1>
 
-        <h2>Changeset {{ changeset }}</h2>
+        <h2>{% trans "Changeset" %} {{ changeset }}</h2>
 
-        {% for top, dirs, files in changeset.walk %}
-        <h3>{{ top.path }}</h3>
+        <h3>{% trans "Added files" %}</h3>
+        {% if changeset.added %}
         <ul>
-            {% for dir in dirs %}
-            <li>{{ dir }}</li>
+            {% for node in changeset.added %}
+            <li><a href="{% url webvcs_node_detail node.changeset.id node.path %}">{{ node }}</a></li>
             {% endfor %}
         </ul>
+        {% endif %}
+
+        <h3>{% trans "Changed files" %}</h3>
+        {% if changeset.changed %}
         <ul>
-            {% for file in files %}
-            <li>{{ file }}</li>
+            {% for node in changeset.changed %}
+            <li><a href="{% url webvcs_node_detail node.changeset.id node.path %}">{{ node }}</a></li>
             {% endfor %}
         </ul>
-        {% endfor %}
+        {% endif %}
 
-    </body>
-</html>
+        <h3>{% trans "Removed files" %}</h3>
+        {% if changeset.removed %}
+        <ul>
+            {% for node in changeset.removed %}
+            <li>{{ node }}</li>
+            {% endfor %}
+        </ul>
+        {% endif %}
 
-
+{% endblock %}
