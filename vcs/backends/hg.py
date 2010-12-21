@@ -30,7 +30,9 @@ from vcs.exceptions import EmptyRepositoryError
 from vcs.exceptions import ChangesetError
 from vcs.exceptions import ChangesetDoesNotExistError
 from vcs.exceptions import NodeDoesNotExistError
-from vcs.nodes import FileNode, DirNode, NodeKind, RootNode, RemovedFileNode
+from vcs.nodes import FileNode, DirNode, NodeKind, RootNode, RemovedFileNode, \
+    RemovedFileNodesGenerator, ChangedFileNodesGenerator, \
+    AddedFileNodesGenerator
 from vcs.utils.lazy import LazyProperty
 from vcs.utils.ordered_dict import OrderedDict
 from vcs.utils.paths import abspath, get_dirs_for_path
@@ -69,22 +71,42 @@ class MercurialRepository(BaseRepository):
 
     @LazyProperty
     def branches(self):
+        """Get's branches for this repository
+        """
+
         if not self.revisions:
             return {}
 
-        sortkey = lambda ctx: ('close' not in ctx[1]._ctx.extra(), ctx[0])
-        s_branches = sorted([(name, self.get_changeset(short(head))) for
-            name, head in self.repo.branchtags().items()], key=sortkey,
-            reverse=False)
-        return OrderedDict((name, cs.raw_id) for name, cs in s_branches)
+        def _branchtags(localrepo):
+            """
+            Patched version of mercurial branchtags to not return the closed
+            branches
+            :param localrepo: locarepository instance
+            """
+
+            bt = {}
+            for bn, heads in localrepo.branchmap().iteritems():
+                tip = heads[-1]
+                if 'close' not in localrepo.changelog.read(tip)[5]:
+                    bt[bn] = tip
+            return bt
+
+        sortkey = lambda ctx: ctx[0] #sort by name
+        _branches = [(n, hex(h),) for n, h in _branchtags(self.repo).items()]
+
+        return OrderedDict(sorted(_branches, key=sortkey, reverse=False))
 
     @LazyProperty
     def tags(self):
+        """Get's tags for this repository
+        """
+
         if not self.revisions:
             return {}
 
-        sortkey = lambda ctx: ctx[0]
-        _tags = [(name, hex(head),) for name, head in self.repo.tags().items()]
+        sortkey = lambda ctx: ctx[0] #sort by name
+        _tags = [(n, hex(h),) for n, h in self.repo.tags().items()]
+
         return OrderedDict(sorted(_tags, key=sortkey, reverse=True))
 
     def _set_repo(self, create, src_url=None, update_after_clone=False):
@@ -257,11 +279,7 @@ class MercurialChangeset(BaseChangeset):
         self.branch = ctx.branch()
         self.tags = ctx.tags()
         self.date = date_fromtimestamp(*ctx.date())
-        self._file_paths = list(ctx)
-        self._dir_paths = list(set(get_dirs_for_path(*self._file_paths)))
-        self._dir_paths.insert(0, '') # Needed for root node
         self.nodes = {}
-
 
     @LazyProperty
     def status(self):
@@ -276,6 +294,17 @@ class MercurialChangeset(BaseChangeset):
 #            return map(lambda x: x[0] + x[1], zip(st1, st2))
 
         return st1
+
+
+    @LazyProperty
+    def _file_paths(self):
+        return list(self._ctx)
+
+    @LazyProperty
+    def _dir_paths(self):
+        p = list(set(get_dirs_for_path(*self._file_paths)))
+        p.insert(0, '')
+        return p
 
     @LazyProperty
     def _paths(self):
@@ -429,27 +458,45 @@ class MercurialChangeset(BaseChangeset):
         return self.nodes[path]
 
     @LazyProperty
+    def _ppmp(self):
+        """
+        Helper cache function for getting manifest files used in added
+        changed removed functions
+        """
+        p = self._ctx.parents()
+        large_ = len(self.affected_files) > 100
+        if large_:
+            manifest = []
+            parrent_manifest = []
+        else:
+            manifest = self._ctx.manifest()
+            parrent_manifest = p[0].manifest()
+        return p, self.affected_files, manifest, parrent_manifest, large_
+
+
+    @LazyProperty
+    def affected_files(self):
+        """
+        Get's a fast accessible file changes for given changeset
+        """
+        return self._ctx.files()
+
+    @LazyProperty
     def added(self):
         """
         Returns list of added ``FileNode`` objects.
         """
+        parents, paths, manifest, parent_manifest, large_ = self._ppmp
         #use status when this cs is a merge
-        if len(self._ctx.parents()) > 1 :
-            return map(self.get_node, self.status[1])
+        if len(parents) > 1 or large_:
+            return AddedFileNodesGenerator([n for n in self.status[1]], self)
 
-        paths = self._ctx.files()
         added_nodes = []
         for path in paths:
-            try:
-                last_node = self.repository.get_changeset(hex(
-                                    self._get_filectx(path).filectx(0).node()))
-                node = self.get_node(path)
-                if last_node is self:
-                    added_nodes.append(node)
-            except ChangesetError:
-                pass
-        return added_nodes
+            if not parent_manifest.has_key(path):
+                added_nodes.append(path)
 
+        return AddedFileNodesGenerator(added_nodes, self)
 
 
     @LazyProperty
@@ -457,41 +504,35 @@ class MercurialChangeset(BaseChangeset):
         """
         Returns list of modified ``FileNode`` objects.
         """
+        parents, paths, manifest, parent_manifest, large_ = self._ppmp
         #use status when this cs is a merge
-        if len(self._ctx.parents()) > 1 :
-            return map(self.get_node, self.status[0])
+        if len(parents) > 1 or large_:
+            return ChangedFileNodesGenerator([ n for n in  self.status[0]], self)
 
-        paths = self._ctx.files()
         changed_nodes = []
         for path in paths:
-            try:
-                last_node = self.repository.get_changeset(hex(
-                                    self._get_filectx(path).filectx(0).node()))
-                node = self.get_node(path)
-                if last_node is not self:
-                    changed_nodes.append(node)
-            except ChangesetError:
-                pass
-        return changed_nodes
+            if manifest.has_key(path) and parent_manifest.has_key(path):
+                changed_nodes.append(path)
+
+        return ChangedFileNodesGenerator(changed_nodes, self)
 
     @LazyProperty
     def removed(self):
         """
         Returns list of removed ``FileNode`` objects.
         """
+        parents, paths, manifest, parent_manifest, large_ = self._ppmp
         #use status when this cs is a merge
-        if len(self._ctx.parents()) > 1 :
-            return map(RemovedFileNode, self.status[2] + self.status[3])
+        if len(parents) > 1 or large_:
+            rm_nodes = self.status[2] + self.status[3]
+            return RemovedFileNodesGenerator([n for n in rm_nodes], self)
 
-        paths = self._ctx.files()
         removed_nodes = []
         for path in paths:
-            try:
-                self.get_node(path)
-            except NodeDoesNotExistError:
-                node = RemovedFileNode(path=path)
-                removed_nodes.append(node)
-        return removed_nodes
+            if not manifest.has_key(path):
+                removed_nodes.append(path)
+
+        return RemovedFileNodesGenerator(removed_nodes, self)
 
 
 class MercurialInMemoryChangeset(BaseInMemoryChangeset):
