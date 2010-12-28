@@ -407,7 +407,7 @@ class BaseChangeset(object):
         """
         Returns next changeset from current, if branch is gives it will return
         next changeset belonging to this branch
-        
+
         :param branch: show changesets within the given named branch
         """
         raise NotImplementedError
@@ -416,8 +416,8 @@ class BaseChangeset(object):
         """
         Returns previous changeset from current, if branch is gives it will return
         previous changeset belonging to this branch
-        
-        :param branch: show changesets within the given named branch 
+
+        :param branch: show changesets within the given named branch
         """
         raise NotImplementedError
 
@@ -669,9 +669,6 @@ class BaseInMemoryChangeset(object):
                     p.get_node(node.path)
                 except NodeDoesNotExistError:
                     pass
-                except KeyError:
-                    import ipdb; ipdb.set_trace()
-                    pass
                 else:
                     raise NodeAlreadyExistsError("Node at %s already exists "
                         "at %s" % (node.path, p))
@@ -696,7 +693,8 @@ class BaseInMemoryChangeset(object):
 
         if self.changed and not_changed:
             raise NodeNotChangedError("Node at %s wasn't actually changed "
-                "since parents' changesets: %s" % (not_changed[0].path, parents)
+                "since parents' changesets: %s" % (not_changed.pop().path,
+                    parents)
             )
 
         # Check nodes marked as removed
