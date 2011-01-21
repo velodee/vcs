@@ -477,6 +477,16 @@ class MercurialChangeset(BaseChangeset):
             self._fctx[path] = self._ctx[path]
         return self._fctx[path]
 
+    def get_file_mode(self, path):
+        """
+        Returns stat mode of the file at the given ``path``.
+        """
+        fctx = self._get_filectx(path)
+        if 'x' in fctx.flags():
+            return 0100755
+        else:
+            return 0100644
+
     def get_file_content(self, path):
         """
         Returns content of the file at given ``path``.
@@ -729,7 +739,7 @@ class MercurialInMemoryChangeset(BaseInMemoryChangeset):
                     return memfilectx(path=node.path,
                         data=node.content,
                         islink=False,
-                        isexec=False,
+                        isexec=node.is_executable,
                         copied=False)
 
             # or changed
@@ -738,7 +748,7 @@ class MercurialInMemoryChangeset(BaseInMemoryChangeset):
                     return memfilectx(path=node.path,
                         data=node.content,
                         islink=False,
-                        isexec=False,
+                        isexec=node.is_executable,
                         copied=False)
 
             raise RepositoryError("Given path haven't been marked as added,"
