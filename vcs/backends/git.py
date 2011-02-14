@@ -14,29 +14,25 @@ import re
 import time
 import datetime
 import posixpath
-
-from subprocess import Popen, PIPE
-
+from dulwich import objects
+from dulwich.repo import Repo, NotGitRepository
 from itertools import chain
-
-from vcs.backends.base import BaseRepository
+from subprocess import Popen, PIPE
 from vcs.backends.base import BaseChangeset
 from vcs.backends.base import BaseInMemoryChangeset
-from vcs.exceptions import RepositoryError
-from vcs.exceptions import EmptyRepositoryError
-from vcs.exceptions import ChangesetError
+from vcs.backends.base import BaseRepository
 from vcs.exceptions import ChangesetDoesNotExistError
+from vcs.exceptions import ChangesetError
+from vcs.exceptions import EmptyRepositoryError
 from vcs.exceptions import NodeDoesNotExistError
+from vcs.exceptions import RepositoryError
 from vcs.exceptions import TagAlreadyExistError
 from vcs.exceptions import TagDoesNotExistError
 from vcs.nodes import FileNode, DirNode, NodeKind, RootNode, RemovedFileNode
-from vcs.utils.paths import abspath
+from vcs.utils import safe_unicode, makedate, date_fromtimestamp
 from vcs.utils.lazy import LazyProperty
 from vcs.utils.ordered_dict import OrderedDict
-from vcs.utils import safe_unicode, makedate, date_fromtimestamp
-
-from dulwich.repo import Repo, NotGitRepository
-from dulwich import objects
+from vcs.utils.paths import abspath
 
 class GitRepository(BaseRepository):
     """
@@ -115,9 +111,13 @@ class GitRepository(BaseRepository):
             raise RepositoryError(str(err))
 
     def _get_all_revisions(self):
-        cmd = 'log --pretty=oneline'
-        so, se = self.run_git_command(cmd)
-        revisions = [line.split()[0] for line in so.split('\n')[:-1]]
+        cmd = 'rev-list --all --date-order'
+        try:
+            so, se = self.run_git_command(cmd)
+        except RepositoryError:
+            # Can be raised for empty repositories
+            return []
+        revisions = so.splitlines()
         revisions.reverse()
         return revisions
 
@@ -294,18 +294,13 @@ class GitRepository(BaseRepository):
         attribute if None is given whole list of revisions is returned
         :param limit: int limit or None
         """
-        count = self.count()
-        offset = offset or 0
-        limit = limit or None
-        i = 0
-        while True:
-            if limit and i == limit:
-                break
-            i += 1
-            rev_index = count - offset - i
-            if rev_index < 0:
-                break
-            id = self.revisions[rev_index]
+        top = self.get_changeset(offset)
+        args = [top.raw_id]
+        if limit is not None:
+            args.append('--max-count %d' % limit)
+        cmd = 'rev-list ' + ' '.join(args)
+        so, se = self.run_git_command(cmd)
+        for id in so.splitlines():
             yield self.get_changeset(id)
 
     @LazyProperty
@@ -613,9 +608,9 @@ class GitChangeset(BaseChangeset):
         for parent in self.parents:
             try:
                 # Second param at --stat is for paths to be showed completely
-                cmd = 'diff --stat=0,9999 %s %s' % (self.raw_id, parent.raw_id)
+                cmd = 'diff --stat=999,999 %s %s' % (self.raw_id, parent.raw_id)
                 so, se = self.repository.run_git_command(cmd)
-                for line in so.split('\n')[:-2]:
+                for line in so.splitlines()[:-1]:
                     path = line.split()[0]
                     if path in not_changed_paths:
                         continue
