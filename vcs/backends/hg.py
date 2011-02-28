@@ -25,6 +25,7 @@ from mercurial.node import hex
 from mercurial.commands import clone, pull, nullid
 from mercurial.context import memctx, memfilectx
 from mercurial import archival
+from mercurial.revlog import lazymap
 
 from vcs.backends import ARCHIVE_SPECS
 from vcs.backends.base import BaseRepository, BaseChangeset, \
@@ -44,6 +45,7 @@ from vcs.utils.lazy import LazyProperty
 from vcs.utils.ordered_dict import OrderedDict
 from vcs.utils.paths import abspath, get_dirs_for_path
 from vcs.utils import safe_unicode, makedate, date_fromtimestamp
+
 
 class MercurialRepository(BaseRepository):
     """
@@ -70,8 +72,16 @@ class MercurialRepository(BaseRepository):
         self.baseui = baseui or ui.ui()
         # We've set path and ui, now we can set _repo itself
         self._repo = self._get_repo(create, src_url, update_after_clone)
-        self.revisions = list(self._repo)
-        self.changesets = {}
+        self.changesets = {} #memory for initialized revisions
+
+    @LazyProperty
+    def revisions(self):
+        """
+        Returns list of revisions' ids, in ascending order.  Being lazy
+        attribute allows external tools to inject shas from cache.
+        """
+        return self._get_all_revisions()
+
 
     @LazyProperty
     def name(self):
@@ -105,6 +115,13 @@ class MercurialRepository(BaseRepository):
 
         return OrderedDict(sorted(_branches, key=sortkey, reverse=False))
 
+
+    @LazyProperty
+    def tags(self):
+        """Get's tags for this repository
+        """
+        return self._get_tags()
+
     def _get_tags(self):
         if not self.revisions:
             return {}
@@ -113,12 +130,6 @@ class MercurialRepository(BaseRepository):
         _tags = [(n, hex(h),) for n, h in self._repo.tags().items()]
 
         return OrderedDict(sorted(_tags, key=sortkey, reverse=True))
-
-    @LazyProperty
-    def tags(self):
-        """Get's tags for this repository
-        """
-        return self._get_tags()
 
     def tag(self, name, user, revision=None, message=None, date=None, **kwargs):
         """
@@ -180,6 +191,21 @@ class MercurialRepository(BaseRepository):
             self.tags = self._get_tags()
         except Abort, e:
             raise RepositoryError(e.message)
+
+    def _get_all_revisions(self):
+
+        nodemap = self._repo.changelog.nodemap
+
+        if isinstance(nodemap, dict):
+            sortkey = self._repo.changelog.nodemap.get
+            return map(hex, sorted(nodemap, key=sortkey))[1:]
+        elif isinstance(nodemap, lazymap):
+            #for large repos nodemap is a lazymap instance, in future
+            #versions of mercurial >1.8 lazymap is going to be destroyed
+            #in replacement for lazyloaded  dict
+            return map(hex, nodemap)[:-2]
+        else:
+            raise VCSError('undefined type of nodemap need dict or lazymap')
 
     def _get_repo(self, create, src_url=None, update_after_clone=False):
         """
@@ -251,21 +277,50 @@ class MercurialRepository(BaseRepository):
         return self._repo.ui.configbool("web", "hidden", untrusted=True)
 
     def _get_revision(self, revision):
+        """
+        Get's an ID revision given as str. This will always return a fill
+        40 char revision number
+        
+        :param revision: str or int or None
+        """
         if len(self.revisions) == 0:
             raise EmptyRepositoryError("There are no changesets yet")
+
         if revision in (None, 'tip', -1):
             revision = self.revisions[-1]
-        if isinstance(revision, int) and revision not in self.revisions:
-            raise ChangesetDoesNotExistError("Revision %r does not exist "
+
+        #revision as int or digit string
+        if isinstance(revision, int) or (revision.isdigit() \
+                                         and len(revision) < 12):
+            try:
+                revision = self.revisions[revision]
+            except IndexError:
+                raise ChangesetDoesNotExistError("Revision %r does not exist "
                 "for this repository %s" % (revision, self))
-        elif isinstance(revision, (str, unicode)) and revision.isdigit() \
-                                                    and len(revision) < 12:
-            revision = int(revision)
-        elif isinstance(revision, (str, unicode)):
-            pattern = re.compile(r'^[[0-9a-fA-F]{12}|[0-9a-fA-F]{40}]$')
-            if not pattern.match(revision):
+
+        elif isinstance(revision, basestring):
+            pattern_short_id = re.compile(r'[0-9a-fA-F]{12}$')
+            pattern_raw_id = re.compile(r'[0-9a-fA-F]{40}$')
+
+            is_short = pattern_short_id.match(revision)
+            is_raw = pattern_raw_id.match(revision)
+
+            #we need to make raw_id out of shortid
+            if is_short:
+                #this is little more heavy but still fast enough
+                try:
+                    short_id = revision
+                    revision = hex(self._repo.lookup(short_id))
+                except (IndexError, ValueError, RepoLookupError):
+                    raise ChangesetDoesNotExistError("Revision %r does not "
+                                            "exist for this repository %s" \
+                                            % (short_id, self))
+
+            #this is a 40 char
+            elif not is_raw or not revision in self.revisions:
                 raise ChangesetDoesNotExistError("Revision %r does not exist "
                     "for this repository %s" % (revision, self))
+
         return revision
 
     def _get_archives(self, archive_name='tip'):
@@ -293,52 +348,38 @@ class MercurialRepository(BaseRepository):
         revision = self._get_revision(revision)
         if not self.changesets.has_key(revision):
             changeset = MercurialChangeset(repository=self, revision=revision)
-            self.changesets[changeset.revision] = changeset
             self.changesets[changeset.raw_id] = changeset
-            self.changesets[changeset.short_id] = changeset
+            return changeset
+
         return self.changesets[revision]
 
-    def get_changesets(self, limit=10, offset=None):
+    def get_changesets(self, start=None, end=None, start_date=None,
+                       end_date=None, branch_name=None, reverse=False):
         """
-        Return last n number of ``MercurialChangeset`` specified by limit
-        attribute if None is given whole list of revisions is returned
-
-        :param limit: int limit or None
-        :param offset: int offset
+        Returns iterator of ``MercurialChangeset`` objects from start to end 
+        This should behave just like a list, ie. end is not inclusive
+         
+        
+        :param start: int None or str
+        :param end: int None or str
+        :param start_date:
+        :param end_date:
+        :param branch_name:
+        :param reversed:
         """
+        if not isinstance(start, int):
+            start = self.revisions.index(self._get_revision(start))
+        if not isinstance(end, int):
+            end = self.revisions.index(self._get_revision(end))
 
-        offset = offset or 0
-        limit = limit or None
-        i = 0
-        while True:
-            if limit and i == limit:
-                break
-            rev = offset + i
-            i += 1
-            if rev >= self.count():
-                break
-            yield self.get_changeset(rev)
+        if start > end:
+            raise RepositoryError('start cannot be after end')
+        #print 'getcs', start, end, self.revisions[start:end]
+        slice = reversed(self.revisions[start:end]) if reverse else \
+            self.revisions[start:end]
 
-
-    def get_changesets_ranges(self, from_rev, to_rev, limit=None):
-        start_cs = self.get_changeset(from_rev)
-        end_cs = self.get_changeset(to_rev)
-
-        if start_cs.revision >= end_cs.revision:
-            raise RepositoryError('Starting revision cannot be after End')
-
-        yield start_cs
-
-        cnt = 0
-        while 1:
-            next = start_cs.next()
-            yield next
-            start_cs = next
-            cnt += 1
-            if next == end_cs:
-                break
-            if limit and cnt > limit:
-                break
+        for id_ in slice:
+            yield self.get_changeset(id_)
 
     def pull(self, url):
         """
@@ -359,7 +400,7 @@ class MercurialChangeset(BaseChangeset):
 
     def __init__(self, repository, revision):
         self.repository = repository
-        revision = repository._get_revision(revision)
+        revision = repository.revisions.index(repository._get_revision(revision))
         try:
             ctx = repository._repo[revision]
         except RepoLookupError:
@@ -800,14 +841,12 @@ class MercurialInMemoryChangeset(BaseInMemoryChangeset):
         commit_ctx._date = date
 
         # TODO: Catch exceptions!
-        self.repository._repo.commitctx(commit_ctx) # Returns mercurial node
+        n = self.repository._repo.commitctx(commit_ctx) # Returns mercurial node
         self._commit_ctx = commit_ctx # For reference
-
         # Update vcs repository object & recreate mercurial _repo
         #new_ctx = self.repository._repo[node]
         #new_tip = self.repository.get_changeset(new_ctx.hex())
-        new_id = self.repository.revisions and \
-            self.repository.revisions[-1] + 1 or 0
+        new_id = hex(n)
         self.repository.revisions.append(new_id)
         self._repo = self.repository._get_repo(create=False)
         self.repository.changesets.pop(None, None)
