@@ -591,11 +591,14 @@ class MercurialChangeset(BaseChangeset):
 
         allowed_kinds = ARCHIVE_SPECS.keys()
         if kind not in allowed_kinds:
-            raise ImproperArchiveTypeError('Archive kind not supported use one of %s',
-                           allowed_kinds)
+            raise ImproperArchiveTypeError('Archive kind not supported use one'
+                'of %s', allowed_kinds)
 
         if stream is None:
-            stream = tempfile.TemporaryFile()
+            temppath = tempfile.mkstemp()[1]
+            stream = open(temppath, 'wb')
+        else:
+            temppath = None
 
         if prefix is None:
             prefix = '%s-%s' % (self.repository.name, self.short_id)
@@ -603,10 +606,13 @@ class MercurialChangeset(BaseChangeset):
         archival.archive(self.repository._repo, stream, self.raw_id,
                          kind, prefix=prefix)
 
-        stream.seek(0)
-        return stream
-
-
+        if stream.closed and temppath:
+            return open(temppath, 'rb')
+        elif stream.closed and hasattr(stream, 'name'):
+            return open(stream.name, 'rb')
+        else:
+            stream.seek(0)
+            return stream
 
     def get_nodes(self, path):
         """
