@@ -516,6 +516,13 @@ class BaseChangeset(object):
         """
         raise NotImplementedError
 
+    @LazyProperty
+    def size(self):
+        """
+        Returns total number of bytes from contents of all filenodes.
+        """
+        return sum((node.size for node in self.get_filenodes_generator()))
+
     def walk(self, topurl=''):
         """
         Similar to os.walk method. Insted of filesystem it walks through
@@ -527,6 +534,14 @@ class BaseChangeset(object):
         for dirnode in topnode.dirs:
             for tup in self.walk(dirnode.path):
                 yield tup
+
+    def get_filenodes_generator(self):
+        """
+        Returns generator that yields *all* file nodes.
+        """
+        for topnode, dirs, files in self.walk():
+            for node in files:
+                yield node
 
 
 class BaseWorkdir(object):
