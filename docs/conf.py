@@ -18,15 +18,15 @@ import os
 # If extensions (or modules to document with autodoc) are in another directory,
 # add these directories to sys.path here. If the directory is relative to the
 # documentation root, use os.path.abspath to make it absolute, like shown here.
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__))))
 sys.path.append(os.path.abspath('..'))
 vcs = __import__('vcs')
-os.environ['DJANGO_SETTINGS_MODULE'] = 'django.conf.global_settings'
 
 # -- General configuration -----------------------------------------------------
 
 # Add any Sphinx extension module names here, as strings. They can be extensions
 # coming with Sphinx (named 'sphinx.ext.*') or your custom ones.
-extensions = ['sphinx.ext.autodoc']
+extensions = ['sphinx.ext.autodoc', 'exts']
 try:
     import rst2pdf
     if rst2pdf.version >= '0.16':
@@ -103,7 +103,7 @@ pygments_style = 'sphinx'
 
 # The theme to use for HTML and HTML Help pages.  Major themes that come with
 # Sphinx are currently 'default' and 'sphinxdoc'.
-html_theme = 'nature'
+html_theme = 'ADC'
 
 # Theme options are theme-specific and customize the look and feel of a theme
 # further.  For a list of options available for each theme, see the
