@@ -1,8 +1,12 @@
+import os
 from vcs.cli import make_option
 from vcs.cli import SingleChangesetCommand
 
 
 class CatCommand(SingleChangesetCommand):
+    """
+    Writes content of a target file to terminal.
+    """
 
     option_list = SingleChangesetCommand.option_list + (
         make_option('--blame', action='store_true', dest='blame',
@@ -11,7 +15,7 @@ class CatCommand(SingleChangesetCommand):
         make_option('--plain', action='store_true', dest='plain',
             default=False,
             help='Simply write output to terminal, don\'t use '
-                 'any extra formatting/colors.'),
+                 'any extra formatting/colors (pygments).'),
         make_option('-n', '--line-numbers', action='store_true', dest='linenos',
             default=False, help='Shows line numbers'),
     )
@@ -70,8 +74,11 @@ class CatCommand(SingleChangesetCommand):
         self.stdout.write(text)
 
 
+    def get_relative_filename(self, filename):
+        return os.path.relpath(filename, self.repo.path)
+
     def handle_arg(self, changeset, arg, **options):
         filename = arg
-        node = changeset.get_node(filename)
+        node = changeset.get_node(self.get_relative_filename(filename))
         self.cat(node, **options)
 
