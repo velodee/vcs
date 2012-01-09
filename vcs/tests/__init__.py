@@ -35,6 +35,7 @@ from test_git import *
 from test_hg import *
 from test_inmemchangesets import *
 from test_nodes import *
+from test_repository import *
 from test_tags import *
 from test_utils import *
 from test_utils_filesize import *
